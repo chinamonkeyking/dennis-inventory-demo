@@ -9,6 +9,7 @@ import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.orm.ObjectOptimisticLockingFailureException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.servlet.resource.NoResourceFoundException;
 
 /**
  * Translates exceptions from all controllers into the API response envelope.
@@ -65,6 +66,11 @@ public class GlobalExceptionHandler {
         return ResponseEntity.status(errorCode.getHttpStatus())
                 .body(ApiResponse.failure(
                         requestId, errorCode, "data conflict"));
+    }
+
+    @ExceptionHandler(NoResourceFoundException.class)
+    public ResponseEntity<Void> handleNoResourceFound(NoResourceFoundException exception) {
+        return ResponseEntity.notFound().build();
     }
 
     // Fallback for any exception not handled by a more specific handler above.

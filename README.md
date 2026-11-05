@@ -18,8 +18,9 @@
   - [7.1 Prerequisites](#71-prerequisites)
   - [7.2 Build and Start](#72-build-and-start)
   - [7.3 Health Check](#73-health-check)
-  - [7.4 API Examples](#74-api-examples)
-  - [7.5 Notes](#75-notes)
+  - [7.4 API Documentation](#74-api-documentation)
+  - [7.5 API Examples](#75-api-examples)
+  - [7.6 Notes](#76-notes)
 
 ## 1. User Journey
 ```mermaid
@@ -261,7 +262,30 @@ java -jar target/dennis-inventory-demo-0.0.1-SNAPSHOT.jar --server.port=18080
 curl http://localhost:8080/actuator/health
 ```
 
-### 7.4 API Examples
+### 7.4 API Documentation
+
+OpenAPI/Swagger is disabled by default. Enable it with the `dev` profile:
+
+```bash
+mvn spring-boot:run -Dspring-boot.run.profiles=dev
+```
+
+Or with the executable jar:
+
+```bash
+java -jar target/dennis-inventory-demo-0.0.1-SNAPSHOT.jar --spring.profiles.active=dev
+```
+
+Available endpoints:
+
+```text
+OpenAPI JSON: http://localhost:8080/v3/api-docs
+Swagger UI:   http://localhost:8080/swagger-ui/index.html
+```
+
+Without the `dev` profile, both endpoints return HTTP 404 and are not exposed.
+
+### 7.5 API Examples
 
 > **Windows users:** The `curl` examples below use Bash quoting and line continuations. Run them in **Git Bash** on Windows. Using `cmd.exe` or PowerShell may require different quoting and escaping.
 
@@ -452,7 +476,7 @@ This returns HTTP 400 with code `1005`.
 
 Note that business and validation errors use HTTP 200. Inspect the response body's `code`; only malformed JSON uses HTTP 400, and unexpected server errors use HTTP 500.
 
-### 7.5 Notes
+### 7.6 Notes
 
 - Spring Boot 4 requires Java 17 or newer; Java 11 is not supported.
 - H2 data is reset when the application restarts because `schema.sql` and `data.sql` are re-executed on each application start.
