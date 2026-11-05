@@ -69,7 +69,7 @@ sequenceDiagram
 ## 3. Target
 Build a running version under the assumptions and also a skeleton for extension
 - ✅ **v1**: three functions with proper error code and test
-- **v2**: logging and elapsed time
+- ✅ **v2**: logging and elapsed time
 - **v3**: query filtering, sorting and paging
 
 ## 4. API and Error Code Notes
@@ -384,4 +384,5 @@ Note that business and validation errors use HTTP 200. Inspect the response body
 - Spring Boot 4 requires Java 17 or newer; Java 11 is not supported.
 - H2 data is reset when the application restarts because `schema.sql` and `data.sql` are re-executed on each application start.
 - No external database, Docker, or Kubernetes setup is required for this demo.
+
 

@@ -7,6 +7,7 @@ import io.dennis.inventory.demo.dto.CreateInventoryRequest;
 import io.dennis.inventory.demo.dto.InventoryView;
 import io.dennis.inventory.demo.dto.QueryInventoryRequest;
 import io.dennis.inventory.demo.dto.UpdateInventoryRequest;
+import io.dennis.inventory.demo.logging.ApiRequestLogger;
 import io.dennis.inventory.demo.service.InventoryService;
 import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -31,7 +32,8 @@ public class InventoryController {
             @RequestBody ApiRequest<QueryInventoryRequest> request,
             HttpServletRequest httpServletRequest) {
         String requestId = RequestIdUtil.requireRequestId(request, httpServletRequest);
-        return ApiResponse.success(requestId, inventoryService.query());
+        return ApiRequestLogger.log("inventory.query", requestId,
+                () -> ApiResponse.success(requestId, inventoryService.query()));
     }
 
     @PostMapping("/create")
@@ -39,7 +41,8 @@ public class InventoryController {
             @RequestBody ApiRequest<CreateInventoryRequest> request,
             HttpServletRequest httpServletRequest) {
         String requestId = RequestIdUtil.requireRequestId(request, httpServletRequest);
-        return ApiResponse.success(requestId, inventoryService.create(request.params()));
+        return ApiRequestLogger.log("inventory.create", requestId,
+                () -> ApiResponse.success(requestId, inventoryService.create(request.params())));
     }
 
     @PostMapping("/update")
@@ -47,6 +50,7 @@ public class InventoryController {
             @RequestBody ApiRequest<UpdateInventoryRequest> request,
             HttpServletRequest httpServletRequest) {
         String requestId = RequestIdUtil.requireRequestId(request, httpServletRequest);
-        return ApiResponse.success(requestId, inventoryService.update(request.params()));
+        return ApiRequestLogger.log("inventory.update", requestId,
+                () -> ApiResponse.success(requestId, inventoryService.update(request.params())));
     }
 }
