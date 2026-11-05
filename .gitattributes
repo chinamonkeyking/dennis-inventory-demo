@@ -1,0 +1,12 @@
+# Normalize text files in the repository.
+* text=auto
+
+# Shell scripts must keep LF, even when checked out on Windows.
+*.sh text eol=lf
+*.bash text eol=lf
+*.zsh text eol=lf
+
+# Windows-native scripts should keep CRLF.
+*.bat text eol=crlf
+*.cmd text eol=crlf
+*.ps1 text eol=crlf
