@@ -4,6 +4,8 @@ import io.dennis.inventory.demo.api.BusinessException;
 import io.dennis.inventory.demo.api.ErrorCode;
 import io.dennis.inventory.demo.dto.CreateInventoryRequest;
 import io.dennis.inventory.demo.dto.InventoryView;
+import io.dennis.inventory.demo.dto.PageResult;
+import io.dennis.inventory.demo.dto.QueryInventoryRequest;
 import io.dennis.inventory.demo.dto.UpdateInventoryRequest;
 import io.dennis.inventory.demo.entity.Inventory;
 import io.dennis.inventory.demo.repository.InventoryRepository;
@@ -32,30 +34,152 @@ class InventoryServiceTest {
     // query
     //------------------------------------------------------------------
     @Test
-    void returnsEmptyListWhenNoInventoriesExist() {
-        assertThat(inventoryService.query()).isEmpty();
+    void returnsDefaultEmptyPageWhenNoInventoriesExist() {
+        PageResult<InventoryView> result = inventoryService.query(null);
+
+        assertThat(result.items()).isEmpty();
+        assertThat(result.page()).isEqualTo(1);
+        assertThat(result.size()).isEqualTo(20);
+        assertThat(result.totalCount()).isZero();
     }
 
     @Test
-    void returnsInventoriesOrderedById() {
-        Inventory first = inventoryRepository.saveAndFlush(new Inventory(
-                "Chocolate Cake", 1, 3, 10, "admin", Instant.now().toEpochMilli()));
-        Inventory second = inventoryRepository.saveAndFlush(new Inventory(
-                "Cheesecake", 1, 3, 5, "admin", Instant.now().toEpochMilli()));
+    void returnsDefaultPageOrderedById() {
+        Inventory first = saveInventory("Chocolate Cake", 1, 3, 10);
+        Inventory second = saveInventory("Cheesecake", 1, 3, 5);
 
-        List<InventoryView> inventories = inventoryService.query();
+        PageResult<InventoryView> result = inventoryService.query(null);
 
-        assertThat(inventories)
+        assertThat(result.items())
                 .extracting(InventoryView::id)
                 .containsExactly(first.getId(), second.getId());
-        assertThat(inventories.get(0).name()).isEqualTo("Chocolate Cake");
-        assertThat(inventories.get(0).categoryName()).isEqualTo("Food");
-        assertThat(inventories.get(0).subCategoryName()).isEqualTo("Cake");
-        assertThat(inventories.get(0).quantity()).isEqualTo(10);
-        assertThat(inventories.get(1).name()).isEqualTo("Cheesecake");
-        assertThat(inventories.get(1).categoryName()).isEqualTo("Food");
-        assertThat(inventories.get(1).subCategoryName()).isEqualTo("Cake");
-        assertThat(inventories.get(1).quantity()).isEqualTo(5);
+        assertThat(result.page()).isEqualTo(1);
+        assertThat(result.size()).isEqualTo(20);
+        assertThat(result.totalCount()).isEqualTo(2);
+        assertThat(result.items().get(0).name()).isEqualTo("Chocolate Cake");
+        assertThat(result.items().get(0).categoryName()).isEqualTo("Food");
+        assertThat(result.items().get(0).subCategoryName()).isEqualTo("Cake");
+    }
+
+    @Test
+    void filtersByCategoryAndSubCategory() {
+        saveInventory("Chocolate Cake", 1, 3, 10);
+        saveInventory("Cheesecake", 1, 3, 5);
+        saveInventory("Running Shoe", 2, 4, 7);
+
+        PageResult<InventoryView> byCategory = inventoryService.query(
+                new QueryInventoryRequest(1, null, null, null, null, null));
+        PageResult<InventoryView> bySubCategory = inventoryService.query(
+                new QueryInventoryRequest(null, 4, null, null, null, null));
+        PageResult<InventoryView> combined = inventoryService.query(
+                new QueryInventoryRequest(1, 4, null, null, null, null));
+
+        assertThat(byCategory.totalCount()).isEqualTo(2);
+        assertThat(byCategory.items())
+                .extracting(InventoryView::name)
+                .containsExactly("Chocolate Cake", "Cheesecake");
+        assertThat(bySubCategory.totalCount()).isEqualTo(1);
+        assertThat(bySubCategory.items().get(0).name()).isEqualTo("Running Shoe");
+        assertThat(combined.items()).isEmpty();
+        assertThat(combined.totalCount()).isZero();
+    }
+
+    @Test
+    void returnsEmptyPageForUnknownCategory() {
+        PageResult<InventoryView> result = inventoryService.query(
+                new QueryInventoryRequest(999, null, null, null, 2, 5));
+
+        assertThat(result.items()).isEmpty();
+        assertThat(result.page()).isEqualTo(2);
+        assertThat(result.size()).isEqualTo(5);
+        assertThat(result.totalCount()).isZero();
+    }
+
+    @Test
+    void sortsAndPagesResults() {
+        saveInventory("Cake A", 1, 3, 10);
+        saveInventory("Cake B", 1, 3, 5);
+        saveInventory("Cake C", 1, 3, 7);
+
+        PageResult<InventoryView> firstPage = inventoryService.query(
+                new QueryInventoryRequest(null, null, "quantity", "desc", 1, 2));
+        PageResult<InventoryView> secondPage = inventoryService.query(
+                new QueryInventoryRequest(null, null, "quantity", "desc", 2, 2));
+
+        assertThat(firstPage.items())
+                .extracting(InventoryView::name)
+                .containsExactly("Cake A", "Cake C");
+        assertThat(firstPage.totalCount()).isEqualTo(3);
+        assertThat(firstPage.page()).isEqualTo(1);
+        assertThat(firstPage.size()).isEqualTo(2);
+        assertThat(secondPage.items())
+                .extracting(InventoryView::name)
+                .containsExactly("Cake B");
+        assertThat(secondPage.totalCount()).isEqualTo(3);
+        assertThat(secondPage.page()).isEqualTo(2);
+    }
+
+    @Test
+    void usesIdAsStableTieBreaker() {
+        Inventory first = saveInventory("Cake A", 1, 3, 5);
+        Inventory second = saveInventory("Cake B", 1, 3, 5);
+
+        PageResult<InventoryView> result = inventoryService.query(
+                new QueryInventoryRequest(null, null, "quantity", "ASC", 1, 20));
+
+        assertThat(result.items())
+                .extracting(InventoryView::id)
+                .containsExactly(first.getId(), second.getId());
+    }
+
+    @Test
+    void acceptsAllAllowedSortFields() {
+        saveInventory("Cake A", 1, 3, 5);
+
+        for (String sortBy : List.of(
+                "id", "name", "quantity", "createdAtUtcMs", "updatedAtUtcMs")) {
+            PageResult<InventoryView> result = inventoryService.query(
+                    new QueryInventoryRequest(null, null, sortBy, "ASC", 1, 20));
+            assertThat(result.items()).hasSize(1);
+        }
+    }
+
+    @Test
+    void returnsEmptyPageBeyondLastPage() {
+        saveInventory("Cake A", 1, 3, 5);
+
+        PageResult<InventoryView> result = inventoryService.query(
+                new QueryInventoryRequest(null, null, null, null, 2, 1));
+
+        assertThat(result.items()).isEmpty();
+        assertThat(result.page()).isEqualTo(2);
+        assertThat(result.size()).isEqualTo(1);
+        assertThat(result.totalCount()).isEqualTo(1);
+    }
+
+    @Test
+    void rejectsInvalidQueryParameters() {
+        assertQueryBusinessError(
+                new QueryInventoryRequest(0, null, null, null, null, null),
+                ErrorCode.INVALID_REQUEST);
+        assertQueryBusinessError(
+                new QueryInventoryRequest(null, 0, null, null, null, null),
+                ErrorCode.INVALID_REQUEST);
+        assertQueryBusinessError(
+                new QueryInventoryRequest(null, null, null, null, 0, null),
+                ErrorCode.INVALID_REQUEST);
+        assertQueryBusinessError(
+                new QueryInventoryRequest(null, null, null, null, null, 0),
+                ErrorCode.INVALID_REQUEST);
+        assertQueryBusinessError(
+                new QueryInventoryRequest(null, null, null, null, null, 101),
+                ErrorCode.INVALID_REQUEST);
+        assertQueryBusinessError(
+                new QueryInventoryRequest(null, null, "price", "ASC", null, null),
+                ErrorCode.INVALID_REQUEST);
+        assertQueryBusinessError(
+                new QueryInventoryRequest(null, null, null, "sideways", null, null),
+                ErrorCode.INVALID_REQUEST);
     }
 
     //------------------------------------------------------------------
@@ -234,6 +358,22 @@ class InventoryServiceTest {
     //------------------------------------------------------------------
     // helper functions
     //------------------------------------------------------------------
+    private Inventory saveInventory(String name, int categoryId, int subCategoryId, int quantity) {
+        return inventoryRepository.saveAndFlush(new Inventory(
+                name,
+                categoryId,
+                subCategoryId,
+                quantity,
+                "admin",
+                Instant.now().toEpochMilli()));
+    }
+
+    private void assertQueryBusinessError(QueryInventoryRequest request, ErrorCode errorCode) {
+        assertThatThrownBy(() -> inventoryService.query(request))
+                .isInstanceOfSatisfying(BusinessException.class,
+                        exception -> assertThat(exception.getErrorCode()).isEqualTo(errorCode));
+    }
+
     private void assertBusinessError(CreateInventoryRequest request, ErrorCode errorCode) {
         assertThatThrownBy(() -> inventoryService.create(request))
                 .isInstanceOfSatisfying(BusinessException.class,

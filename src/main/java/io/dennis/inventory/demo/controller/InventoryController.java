@@ -5,6 +5,7 @@ import io.dennis.inventory.demo.api.ApiResponse;
 import io.dennis.inventory.demo.api.RequestIdUtil;
 import io.dennis.inventory.demo.dto.CreateInventoryRequest;
 import io.dennis.inventory.demo.dto.InventoryView;
+import io.dennis.inventory.demo.dto.PageResult;
 import io.dennis.inventory.demo.dto.QueryInventoryRequest;
 import io.dennis.inventory.demo.dto.UpdateInventoryRequest;
 import io.dennis.inventory.demo.logging.ApiRequestLogger;
@@ -14,8 +15,6 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
-
-import java.util.List;
 
 @RestController
 @RequestMapping("/inventory")
@@ -28,12 +27,12 @@ public class InventoryController {
     }
 
     @PostMapping("/query")
-    public ApiResponse<List<InventoryView>> query(
+    public ApiResponse<PageResult<InventoryView>> query(
             @RequestBody ApiRequest<QueryInventoryRequest> request,
             HttpServletRequest httpServletRequest) {
         String requestId = RequestIdUtil.requireRequestId(request, httpServletRequest);
         return ApiRequestLogger.log("inventory.query", requestId,
-                () -> ApiResponse.success(requestId, inventoryService.query()));
+                () -> ApiResponse.success(requestId, inventoryService.query(request.params())));
     }
 
     @PostMapping("/create")

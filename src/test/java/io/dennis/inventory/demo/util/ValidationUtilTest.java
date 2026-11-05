@@ -91,6 +91,34 @@ class ValidationUtilTest {
                 "categoryId must be positive");
     }
 
+    @Test
+    void optionalPositiveIntegerAllowsNull() {
+        assertThat(ValidationUtil.optionalPositiveInteger(null, "categoryId"))
+                .isNull();
+    }
+
+    @Test
+    void optionalPositiveIntegerRejectsNonPositiveValue() {
+        assertInvalidRequest(
+                () -> ValidationUtil.optionalPositiveInteger(0, "categoryId"),
+                "categoryId must be positive");
+    }
+
+    @Test
+    void requireIntegerInRangeAcceptsBounds() {
+        assertThat(ValidationUtil.requireIntegerInRange(1, "size", 1, 100))
+                .isEqualTo(1);
+        assertThat(ValidationUtil.requireIntegerInRange(100, "size", 1, 100))
+                .isEqualTo(100);
+    }
+
+    @Test
+    void requireIntegerInRangeRejectsOutOfRangeValue() {
+        assertInvalidRequest(
+                () -> ValidationUtil.requireIntegerInRange(0, "size", 1, 100),
+                "size must be between 1 and 100");
+    }
+
     private void assertInvalidRequest(Runnable action, String expectedMessage) {
         assertThatThrownBy(action::run)
                 .isInstanceOfSatisfying(BusinessException.class, exception -> {

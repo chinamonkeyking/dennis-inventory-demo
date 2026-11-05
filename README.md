@@ -70,7 +70,7 @@ sequenceDiagram
 Build a running version under the assumptions and also a skeleton for extension
 - ✅ **v1**: three functions with proper error code and test
 - ✅ **v2**: logging and elapsed time
-- **v3**: query filtering, sorting and paging
+- ✅ **v3**: query filtering, sorting and paging
 
 ## 4. API and Error Code Notes
 For simplicity, put the requestId in body instead of header "X-Request-ID"
@@ -98,25 +98,60 @@ For simplicity, put the requestId in body instead of header "X-Request-ID"
 ### 4.3 API
 | #  | Url               | Method | Notes                                                                                                                       |
 |----|-------------------|--------|-----------------------------------------------------------------------------------------------------------------------------|
-| 1  | /inventory/query  | POST   | Return a list of inventories, blank array for nothing                                                                       | 
+| 1  | /inventory/query  | POST   | Return a filtered, sorted, paged inventory result                                                                           | 
 | 2  | /inventory/create | POST   | Return the new created inventory; craetedBy hardcode to 'admin' in backend                                                  |
 | 3  | /inventory/update | POST   | Only update quantity; updaetdBy hardcode to 'admin' in backend; use version for optimized lock and return the new inventory |
+
+#### Query Parameters
+
+All query parameters are optional:
+
+| Field           | Default    | Rules                                                               |
+|-----------------|------------|---------------------------------------------------------------------|
+| `categoryId`    | no filter  | Positive integer; exact match                                       |
+| `subCategoryId` | no filter  | Positive integer; exact match                                       |
+| `sortBy`        | `id`       | One of `id`, `name`, `quantity`, `createdAtUtcMs`, `updatedAtUtcMs` |
+| `sortDirection` | `ASC`      | `ASC` or `DESC`, case-insensitive                                   |
+| `page`          | `1`        | 1-based, positive                                                   |
+| `size`          | `20`       | 1 to 100                                                            |
+
+For non-id sorting, `id ASC` is added as a stable tie-breaker. Invalid paging or sorting values return code `1000`.
+
+#### Query Response
+
+`data` is a paged object. This is a breaking change from the v1 query array:
+
+```json
+{
+  "requestId": "q-page",
+  "code": 0,
+  "message": "success",
+  "data": {
+    "items": [],
+    "page": 1,
+    "size": 20,
+    "totalCount": 0
+  }
+}
+```
+
+`totalCount` is the number of rows matching the filters. Clients derive `totalPages`, `hasNext`, and `hasPrevious` from `totalCount`, `page`, and `size`. An out-of-range page returns empty `items` with the real `totalCount`.
 
 ### 4.4 Error Code and Message
 
 Business and validation failures use HTTP 200 with a non-zero application code.
 Protocol errors use HTTP 400, and unexpected failures use HTTP 500.
 
-| Error Code | HTTP Status | Error Message                          | Notes                                              |
-|------------|-------------|----------------------------------------|----------------------------------------------------|
-| 0          | 200         | `success`                              | Success                                            |
-| 1000       | 200         | `invalid request: <detail>`            | Parsed request failed validation or has a conflict |
-| 1001       | 200         | `inventory <id> not found`             | Requested inventory does not exist                 |
-| 1002       | 200         | `inventory name '<name>' already exists` | Duplicate inventory name                         |
-| 1003       | 200         | `invalid category: <detail>`           | Category or sub-category is invalid                |
-| 1004       | 200         | `version conflict`                     | Optimistic locking version conflict                |
-| 1005       | 400         | `invalid request body`                 | Missing or unreadable JSON request body            |
-| 9999       | 500         | `system error`                         | Unexpected system failure                          |
+| Error Code | HTTP Status | Error Message                             | Notes                                                               |
+|------------|-------------|-------------------------------------------|---------------------------------------------------------------------|
+| 0          | 200         | `success`                                 | Success                                                             |
+| 1000       | 200         | `invalid request: <detail>`               | Parsed request failed validation, paging/sorting, or has a conflict |
+| 1001       | 200         | `inventory <id> not found`                | Requested inventory does not exist                                  |
+| 1002       | 200         | `inventory name '<name>' already exists`  | Duplicate inventory name                                            |
+| 1003       | 200         | `invalid category: <detail>`              | Category or sub-category is invalid                                 |
+| 1004       | 200         | `version conflict`                        | Optimistic locking version conflict                                 |
+| 1005       | 400         | `invalid request body`                    | Missing or unreadable JSON request body                             |
+| 9999       | 500         | `system error`                            | Unexpected system failure                                           |
 
 
 ## 5. Schema
@@ -244,11 +279,49 @@ Seed categories:
 
 #### Query
 
+Default query:
+
 ```bash
 curl -sS -X POST http://localhost:8080/inventory/query \
   -H 'Content-Type: application/json' \
   -d '{"requestId":"q-1","params":{}}'
 ```
+
+Response shape:
+
+```json
+{
+  "requestId": "q-1",
+  "code": 0,
+  "message": "success",
+  "data": {
+    "items": [],
+    "page": 1,
+    "size": 20,
+    "totalCount": 0
+  }
+}
+```
+
+Filter, sort, and page:
+
+```bash
+curl -sS -X POST http://localhost:8080/inventory/query \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "requestId": "q-page",
+    "params": {
+      "categoryId": 1,
+      "subCategoryId": 3,
+      "sortBy": "quantity",
+      "sortDirection": "desc",
+      "page": 1,
+      "size": 2
+    }
+  }'
+```
+
+Invalid paging or sorting values return HTTP 200 with code `1000`.
 
 #### Create
 

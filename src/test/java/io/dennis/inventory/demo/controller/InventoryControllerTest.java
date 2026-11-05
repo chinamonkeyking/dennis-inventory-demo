@@ -4,6 +4,8 @@ import io.dennis.inventory.demo.api.BusinessException;
 import io.dennis.inventory.demo.api.ErrorCode;
 import io.dennis.inventory.demo.dto.CreateInventoryRequest;
 import io.dennis.inventory.demo.dto.InventoryView;
+import io.dennis.inventory.demo.dto.PageResult;
+import io.dennis.inventory.demo.dto.QueryInventoryRequest;
 import io.dennis.inventory.demo.dto.UpdateInventoryRequest;
 import io.dennis.inventory.demo.entity.Inventory;
 import io.dennis.inventory.demo.service.InventoryService;
@@ -19,6 +21,8 @@ import org.springframework.test.web.servlet.MockMvc;
 import java.util.List;
 
 import static org.hamcrest.Matchers.nullValue;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -39,7 +43,9 @@ class InventoryControllerTest {
     // query
     //------------------------------------------------------------------
     @Test
-    void returnsInventoriesWithRequestId() throws Exception {
+    void returnsPagedInventoriesWithRequestId() throws Exception {
+        QueryInventoryRequest query = new QueryInventoryRequest(
+                1, 3, "quantity", "desc", 2, 2);
         InventoryView inventory = new InventoryView(
                 1,
                 "Chocolate Cake",
@@ -53,31 +59,48 @@ class InventoryControllerTest {
                 1_793_803_882_746L,
                 null,
                 null);
-        given(inventoryService.query()).willReturn(List.of(inventory));
+        PageResult<InventoryView> pageResult =
+                new PageResult<>(List.of(inventory), 2, 2, 3);
+        given(inventoryService.query(query)).willReturn(pageResult);
 
         mockMvc.perform(post("/inventory/query")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
-                                {"requestId":"q-1","params":{}}
+                                {"requestId":"q-1","params":{
+                                  "categoryId":1,
+                                  "subCategoryId":3,
+                                  "sortBy":"quantity",
+                                  "sortDirection":"desc",
+                                  "page":2,
+                                  "size":2
+                                }}
                                 """))
                 .andExpect(status().isOk())
                 .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_JSON))
                 .andExpect(jsonPath("$.requestId").value("q-1"))
                 .andExpect(jsonPath("$.code").value(0))
                 .andExpect(jsonPath("$.message").value("success"))
-                .andExpect(jsonPath("$.data[0].id").value(1))
-                .andExpect(jsonPath("$.data[0].name").value("Chocolate Cake"))
-                .andExpect(jsonPath("$.data[0].categoryId").value(1))
-                .andExpect(jsonPath("$.data[0].categoryName").value("Food"))
-                .andExpect(jsonPath("$.data[0].subCategoryId").value(3))
-                .andExpect(jsonPath("$.data[0].subCategoryName").value("Cake"))
-                .andExpect(jsonPath("$.data[0].quantity").value(10))
-                .andExpect(jsonPath("$.data[0].version").value(0));
+                .andExpect(jsonPath("$.data.items[0].id").value(1))
+                .andExpect(jsonPath("$.data.items[0].name").value("Chocolate Cake"))
+                .andExpect(jsonPath("$.data.items[0].categoryId").value(1))
+                .andExpect(jsonPath("$.data.items[0].categoryName").value("Food"))
+                .andExpect(jsonPath("$.data.items[0].subCategoryId").value(3))
+                .andExpect(jsonPath("$.data.items[0].subCategoryName").value("Cake"))
+                .andExpect(jsonPath("$.data.items[0].quantity").value(10))
+                .andExpect(jsonPath("$.data.page").value(2))
+                .andExpect(jsonPath("$.data.size").value(2))
+                .andExpect(jsonPath("$.data.totalCount").value(3))
+                .andExpect(jsonPath("$.data.totalPages").doesNotExist())
+                .andExpect(jsonPath("$.data.hasNext").doesNotExist())
+                .andExpect(jsonPath("$.data.hasPrevious").doesNotExist());
     }
 
     @Test
-    void returnsEmptyDataArrayWhenNoInventoriesExist() throws Exception {
-        given(inventoryService.query()).willReturn(List.of());
+    void returnsEmptyPageWhenNoInventoriesExist() throws Exception {
+        QueryInventoryRequest query = new QueryInventoryRequest(
+                null, null, null, null, null, null);
+        given(inventoryService.query(query))
+                .willReturn(new PageResult<>(List.of(), 1, 20, 0));
 
         mockMvc.perform(post("/inventory/query")
                         .contentType(MediaType.APPLICATION_JSON)
@@ -88,8 +111,48 @@ class InventoryControllerTest {
                 .andExpect(jsonPath("$.requestId").value("q-empty"))
                 .andExpect(jsonPath("$.code").value(0))
                 .andExpect(jsonPath("$.message").value("success"))
-                .andExpect(jsonPath("$.data").isArray())
-                .andExpect(jsonPath("$.data").isEmpty());
+                .andExpect(jsonPath("$.data.items").isArray())
+                .andExpect(jsonPath("$.data.items").isEmpty())
+                .andExpect(jsonPath("$.data.page").value(1))
+                .andExpect(jsonPath("$.data.size").value(20))
+                .andExpect(jsonPath("$.data.totalCount").value(0));
+    }
+
+    @Test
+    void queryWithMissingParamsUsesDefaults() throws Exception {
+        given(inventoryService.query(isNull()))
+                .willReturn(new PageResult<>(List.of(), 1, 20, 0));
+
+        mockMvc.perform(post("/inventory/query")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"requestId":"q-no-params"}
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value(0))
+                .andExpect(jsonPath("$.data.page").value(1))
+                .andExpect(jsonPath("$.data.size").value(20));
+    }
+
+    @Test
+    void returnsBusinessErrorForInvalidQueryPaging() throws Exception {
+        QueryInventoryRequest query = new QueryInventoryRequest(
+                null, null, null, null, null, 101);
+        given(inventoryService.query(query)).willThrow(
+                new BusinessException(
+                        ErrorCode.INVALID_REQUEST, "size must be between 1 and 100"));
+
+        mockMvc.perform(post("/inventory/query")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"requestId":"q-bad-size","params":{"size":101}}
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.requestId").value("q-bad-size"))
+                .andExpect(jsonPath("$.code").value(1000))
+                .andExpect(jsonPath("$.message")
+                        .value("invalid request: size must be between 1 and 100"))
+                .andExpect(jsonPath("$.data").value(nullValue()));
     }
 
     @Test
@@ -350,7 +413,8 @@ class InventoryControllerTest {
 
     @Test
     void returnsSystemErrorForUnexpectedException() throws Exception {
-        given(inventoryService.query()).willThrow(new IllegalStateException("boom"));
+        given(inventoryService.query(any(QueryInventoryRequest.class)))
+                .willThrow(new IllegalStateException("boom"));
 
         mockMvc.perform(post("/inventory/query")
                         .contentType(MediaType.APPLICATION_JSON)

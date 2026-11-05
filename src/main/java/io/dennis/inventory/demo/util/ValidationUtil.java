@@ -45,4 +45,21 @@ public final class ValidationUtil {
         }
         return value;
     }
+
+    public static Integer optionalPositiveInteger(Integer value, String fieldName) {
+        return value == null ? null : requirePositiveInteger(value, fieldName);
+    }
+
+    public static int requireIntegerInRange(
+            Integer value, String fieldName, int minValue, int maxValue) {
+        if (value == null) {
+            throw new BusinessException(ErrorCode.INVALID_REQUEST, fieldName + " is required");
+        }
+        if (value < minValue || value > maxValue) {
+            throw new BusinessException(
+                    ErrorCode.INVALID_REQUEST,
+                    fieldName + " must be between " + minValue + " and " + maxValue);
+        }
+        return value;
+    }
 }
